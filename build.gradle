@@ -91,7 +91,6 @@ repositories {
 
     maven {
         url = 'https://maven.blamejared.com/'
-        content { includeGroup 'mezz.jei' }
     }
 
     maven {
