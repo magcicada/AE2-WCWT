@@ -7,8 +7,8 @@ ae2             = "15.4.10"
 ae2wtlib        = "15.3.3-forge"
 guideme         = "20.1.15"
 extendedae-plus-runtime = "pN9pMjiW"          # Forge 1.20.1 release 1.5.5; version ID avoids NeoForge artifact collision
-neoecoae                = "20.4.0"
-ldlib           = "7809449"              # CurseMaven: ldlib-626676 (required by Neo ECO 20.4.0)
+neoecoae                = "20.4.2"
+ldlib           = "8830518"              # CurseMaven: ldlib-626676 (required by Neo ECO 20.4.0)
 advancedae      = "1.3.5-1.20.1"       # Modrinth slug: advancedae
 geckolib        = "4.7.4"              # software.bernie.geckolib:geckolib-forge-1.20.1
 glodium         = "1.20-1.5-forge"     # Modrinth slug: glodium
@@ -44,7 +44,7 @@ architectury    = "9.1.12"
 curios          = "5.14.1+1.20.1"
 configuration   = "h7CBg2Oe"           # Modrinth: 3WjjSM5O
 # ---- Recipe viewers ----
-jei             = "15.20.0.106"
+jei             = "15.62.0.217"
 emi             = "1.1.22+1.20.1"
 # ---- Mixin & annotation ----
 mixin           = "0.8.5"
