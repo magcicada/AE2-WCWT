@@ -44,7 +44,7 @@ architectury    = "9.1.12"
 curios          = "5.14.1+1.20.1"
 configuration   = "h7CBg2Oe"           # Modrinth: 3WjjSM5O
 # ---- Recipe viewers ----
-jei             = "15.62.0.217"
+jei             = "15.74.0.234"
 emi             = "1.1.22+1.20.1"
 # ---- Mixin & annotation ----
 mixin           = "0.8.5"
