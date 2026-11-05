@@ -5,123 +5,59 @@ import com.lhy.wcwt.WcwtMod;
 import com.lhy.wcwt.helpers.WcwtWirelessFeatures;
 import com.lhy.wcwt.network.ModNetworking;
 import com.lhy.wcwt.network.WcwtJeiBookmarkOrderPacket;
-import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.common.input.IInternalKeyMappings;
-import mezz.jei.gui.input.CombinedRecipeFocusSource;
-import mezz.jei.gui.input.IClickableIngredientInternal;
-import mezz.jei.common.input.IUserInputHandler;
 import mezz.jei.common.input.UserInput;
-import mezz.jei.gui.input.handlers.BookmarkInputHandler;
-import mezz.jei.common.input.handlers.SameElementInputHandler;
+import mezz.jei.common.input.interaction.IInputInteraction;
+import mezz.jei.common.input.interaction.InputAction;
+import mezz.jei.gui.input.IClickableIngredientInternal;
+import mezz.jei.gui.input.IngredientFocusSource;
+import mezz.jei.gui.input.InputCommands;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.Screen;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import java.lang.reflect.Field;
 import java.util.Optional;
 
-/** Full-JEI bookmark input handling; references JEI internal GUI classes. */
+/** Full-JEI command integration for the WCWT ingredient crafting shortcut. */
 public final class WcwtJeiBookmarkOrder {
-    private static Field focusSourceField;
     private static final boolean DEBUG = Boolean.getBoolean("wcwt.debug.jeiBookmark");
 
     private WcwtJeiBookmarkOrder() {
     }
 
-    public static void handleBookmarkMiddleClick(BookmarkInputHandler handler, Screen screen, UserInput input,
-                                                 IInternalKeyMappings keyBindings,
-                                                 CallbackInfoReturnable<Optional<IUserInputHandler>> cir) {
+    public static void registerInputCommands(InputCommands commands, IngredientFocusSource focusSource,
+                                             IInternalKeyMappings keys) {
+        commands.add("WCWT open ingredient crafting", input -> {
+            Minecraft minecraft = Minecraft.getInstance();
+            return minecraft.options != null && input.is(minecraft.options.keyPickItem)
+                    && !input.is(keys.getBookmark());
+        }, (screen, input) -> prepareCraftAction(focusSource, input, keys));
+    }
+
+    private static Optional<IInputInteraction> prepareCraftAction(IngredientFocusSource focusSource,
+                                                                  UserInput input,
+                                                                  IInternalKeyMappings keys) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.player == null
-                || minecraft.options == null
-                || !input.is(minecraft.options.keyPickItem)
-                || input.is(keyBindings.getBookmark())) {
-            return;
+        if (minecraft.player == null || !WcwtWirelessFeatures.hasAnyTerminal(minecraft.player)) {
+            return Optional.empty();
         }
-        boolean hasTerminal = WcwtWirelessFeatures.hasAnyTerminal(minecraft.player);
-        WcwtMod.LOGGER.warn("[WCWT-DBG] JEI recipe ingredient middle-click: hasAnyTerminal={}", hasTerminal);
-        if (!hasTerminal) {
-            debug("JEI bookmark handler skipped: no WCWT terminal, screen={}, mouse={},{}",
-                    screen == null ? null : screen.getClass().getName(), input.getMouseX(), input.getMouseY());
-            return;
+        Optional<IClickableIngredientInternal<?>> clickedOptional =
+                focusSource.getIngredientForInput(input, keys).findFirst();
+        if (clickedOptional.isEmpty()) {
+            return Optional.empty();
         }
-
-        try {
-            CombinedRecipeFocusSource focusSource = getFocusSource(handler);
-            WcwtMod.LOGGER.warn("[WCWT-DBG] JEI recipe ingredient: focusSource={}", focusSource == null ? "null" : "found");
-            if (focusSource == null) {
-                debug("JEI bookmark handler skipped: no focusSource field on {}", handler.getClass().getName());
-                return;
-            }
-            Optional<IClickableIngredientInternal<?>> clickedOptional =
-                    focusSource.getIngredientUnderMouse(input, keyBindings).findFirst();
-            WcwtMod.LOGGER.warn("[WCWT-DBG] JEI recipe ingredient: clickedOptional present={}", clickedOptional.isPresent());
-            if (clickedOptional.isEmpty()) {
-                return;
-            }
-
-            IClickableIngredientInternal<?> clicked = clickedOptional.get();
-            ITypedIngredient<?> typedIngredient = clicked.getTypedIngredient();
-            GenericStack stack = WcwtRecipeTransferHandler.toGenericStackForBookmark(
-                    typedIngredient);
-            WcwtMod.LOGGER.warn("[WCWT-DBG] JEI recipe ingredient: toGenericStack={}", stack);
-            if (stack == null || stack.what() == null) {
-                return;
-            }
-
-            if (!input.isSimulate()) {
-                WcwtMod.LOGGER.warn("[WCWT-DBG] JEI recipe ingredient: sending OPEN_CRAFT packet, stack={}", stack);
-                debug("JEI bookmark handler sending WCWT craft packet stack={}", stack);
-                ModNetworking.sendToServer(
-                        new WcwtJeiBookmarkOrderPacket(stack, WcwtJeiBookmarkOrderPacket.Action.OPEN_CRAFT));
-            }
-
-            IUserInputHandler sameElement = new SameElementInputHandler(handler, clicked::isMouseOver);
-            cir.setReturnValue(Optional.of(sameElement));
-        } catch (RuntimeException | LinkageError e) {
-            WcwtMod.LOGGER.warn("[WCWT-DBG] JEI recipe ingredient: exception={}", e.toString());
+        IClickableIngredientInternal<?> clicked = clickedOptional.get();
+        GenericStack stack = WcwtRecipeTransferHandler.toGenericStackForBookmark(clicked.getTypedIngredient());
+        if (stack == null || stack.what() == null) {
+            return Optional.empty();
         }
-    }
-
-    private static void debug(String message, Object... args) {
-        if (DEBUG) {
-            WcwtMod.LOGGER.info("WCWT JEI bookmark debug: " + message, args);
-        }
-    }
-
-    private static CombinedRecipeFocusSource getFocusSource(BookmarkInputHandler handler) {
-        try {
-            Field field = focusSourceField;
-            if (field == null) {
-                field = findField(BookmarkInputHandler.class, "focusSource", CombinedRecipeFocusSource.class);
-                if (field == null) {
-                    return null;
-                }
-                focusSourceField = field;
+        // Preparing the command has no side effects. JEI completes mouse actions
+        // on release and checks that the same ingredient is still under the mouse.
+        return Optional.of(InputAction.run(() -> {
+            if (DEBUG) {
+                WcwtMod.LOGGER.info("WCWT JEI crafting shortcut: {}", stack);
             }
-            Object value = field.get(handler);
-            return value instanceof CombinedRecipeFocusSource focusSource ? focusSource : null;
-        } catch (ReflectiveOperationException ignored) {
-            return null;
-        }
-    }
-
-    private static Field findField(Class<?> owner, String preferredName, Class<?> expectedType) {
-        try {
-            Field field = owner.getDeclaredField(preferredName);
-            if (expectedType.isAssignableFrom(field.getType())) {
-                field.setAccessible(true);
-                return field;
-            }
-        } catch (NoSuchFieldException ignored) {
-        }
-
-        for (Field field : owner.getDeclaredFields()) {
-            if (expectedType.isAssignableFrom(field.getType())) {
-                field.setAccessible(true);
-                return field;
-            }
-        }
-        return null;
+            ModNetworking.sendToServer(new WcwtJeiBookmarkOrderPacket(
+                    stack, WcwtJeiBookmarkOrderPacket.Action.OPEN_CRAFT));
+        }).within(clicked::isMouseOver).when(() -> clicked.getElement().isVisible()
+                && minecraft.player != null && WcwtWirelessFeatures.hasAnyTerminal(minecraft.player)));
     }
 }
